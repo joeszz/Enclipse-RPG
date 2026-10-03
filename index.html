@@ -1327,6 +1327,7 @@ ENEMY_ATLAS_IMAGE.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA8AAAAPACAI
 ENEMY_ATLAS_IMAGE.onerror=()=>{console.error('Enemy atlas gagal dimuat dari data internal.');};
 
 function getEnemyAtlasIndex(e,pat){
+  if(e.a!==undefined&&e.a>=0&&e.a<100)return e.a;
   const name=(e.n||'').toUpperCase();
   if(name.includes('KING')&&pat==='king')return 99;
   if(pat==='slime'){
@@ -1389,8 +1390,38 @@ function getEnemyAtlasIndex(e,pat){
   return -1;
 }
 
+const ENEMY_TINT_CACHE=new Map();
+function getTintedSprite(index,deg){
+  const key=index+':'+deg,hit=ENEMY_TINT_CACHE.get(key);
+  if(hit)return hit;
+  const base=ENEMY_ATLAS.sprites[index];
+  if(!base)return null;
+  const cv=document.createElement('canvas');cv.width=80;cv.height=80;
+  const cx=cv.getContext('2d',{willReadFrequently:true});
+  cx.imageSmoothingEnabled=false;cx.drawImage(base.canvas,0,0);
+  const img=cx.getImageData(0,0,80,80),d=img.data;
+  for(let o=0;o<d.length;o+=4){
+    if(!d[o+3])continue;
+    const r=d[o]/255,g=d[o+1]/255,b=d[o+2]/255;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b),df=mx-mn,l=(mx+mn)/2;
+    if(df<.04)continue;
+    const s=df/(1-Math.abs(2*l-1));
+    let h=mx===r?((g-b)/df)%6:mx===g?(b-r)/df+2:(r-g)/df+4;
+    h=(((h*60+deg)%360)+360)%360;
+    const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2;
+    let rr=0,gg=0,bb=0;
+    if(h<60){rr=c;gg=x;}else if(h<120){rr=x;gg=c;}else if(h<180){gg=c;bb=x;}else if(h<240){gg=x;bb=c;}else if(h<300){rr=x;bb=c;}else{rr=c;bb=x;}
+    d[o]=(rr+m)*255;d[o+1]=(gg+m)*255;d[o+2]=(bb+m)*255;
+  }
+  cx.putImageData(img,0,0);
+  const out={canvas:cv,x:base.x,y:base.y,width:base.width,height:base.height};
+  ENEMY_TINT_CACHE.set(key,out);
+  return out;
+}
+
 function drawEnemyAtlasSprite(e,pat){
-  const index=getEnemyAtlasIndex(e,pat),sprite=ENEMY_ATLAS.sprites[index];
+  const index=getEnemyAtlasIndex(e,pat);let sprite=ENEMY_ATLAS.sprites[index];
+  if(sprite&&e.th)sprite=getTintedSprite(index,e.th)||sprite;
   if(!sprite)return false;
   const height=Math.max(e.boss?72:30,e.r*(e.boss?2.2:1.9));
   const width=height*sprite.width/sprite.height;
@@ -2573,29 +2604,221 @@ applyUniqueSkillSets();
 const SKILL_DESCRIPTIONS={pierce:'Menembakkan proyektil lurus yang menembus beberapa musuh.',ricochet:'Proyektil memantul dari satu musuh ke musuh berikutnya.',rain:'Menandai beberapa titik lalu menghujani area.',beam:'Tembakan garis lurus jarak jauh.',blink:'Teleport maju dengan i-frame lalu meledak.',mark:'Memberi tanda target; serangan lanjutan lebih sakit.',execute:'Finisher sangat kuat untuk target sekarat.',shieldDash:'Dash sambil mengurangi damage.',root:'Mengunci musuh di area.',fortify:'Pertahanan besar sementara.',mine:'Ranjau yang meledak setelah jeda.',burst:'Ledakan bertingkat.',pack:'Memanggil unit pendamping.',corpse:'Ledakan area efektif terhadap musuh sekarat.',grave:'Zona kematian.',counter:'Posisi counter; serangan masuk dibalas.',dashImpact:'Dash menghantam dengan knockback kuat.',comboCone:'Pukulan cepat berbentuk kipas.',freeze:'Serangan es yang memperlambat.',charge:'Meluncur cepat ke depan.',shockwave:'Gelombang kejut melingkar.',armorCrush:'Menghancurkan pertahanan target.',orbit:'Serangan berputar mengelilingi.',cone:'Serangan kipas di depan.',fireTrail:'Jalur api.',freezeCone:'Semburan es berbentuk kipas.',wall:'Penghalang.',timeFreeze:'Menghentikan musuh sesaat.',rift:'Celah ruang untuk menyerang area.',timeSlow:'Memperlambat seluruh musuh.',rewind:'Mengacaukan waktu + memulihkan HP.',gravity:'Menarik musuh ke pusat.',blackhole:'Pusat gravitasi besar.',chain:'Petir berpindah target.',shockField:'Medan listrik.',lightningRain:'Hujan petir bertahap.',lavaShot:'Proyektil magma.',groundLine:'Menghantam tanah sepanjang garis.',meteor:'Panggil meteor.',vortex:'Pusaran angin.',coneWind:'Semburan angin lebar.',fear:'Membuat musuh panik.',turret:'Unit otomatis menembak.',minePull:'Ranjau magnet.',healZone:'Memulihkan HP + regen.',transform:'Mode transformasi.',rage:'Mode rage.',shield:'Perisai mengurangi damage.',healNova:'Ledakan penyembuhan + damage.',lineSlash:'Tebasan panjang lurus.',storm:'Serangan beruntun banyak target.',rainLine:'Serangan turun beruntun.',multiShadow:'Rentetan proyektil bayangan.',decoy:'Umpan/clone.',fearLoop:'Musuh panik berulang.',bloodSlash:'Tebasan darah damage tinggi.',duelBuff:'Buff khusus duel.',predict:'Membaca target, meningkatkan akurasi.',focus:'Meningkatkan fokus + damage.',scout:'Mode pengintaian.',sniper:'Tembakan presisi besar.',drain:'Menyerap HP musuh.',soulHarvest:'Menyerang banyak target + heal.',soulShot:'Proyektil jiwa besar + heal.',soulSlash:'Tebasan energi jiwa.',soulStorm:'Badai energi jiwa.',portalStep:'Berpindah jauh lalu meledak.',constellation:'Titik bintang berurutan.',astralMeteor:'Meteor berantai.',decree:'Perintah kerajaan menghentikan musuh.',domain:'Wilayah kekuasaan buff.',eternal:'Ledakan besar + crowd control.',sacrifice:'Mengorbankan HP untuk ledakan besar.',default:'Serangan khusus dengan efek area.'};
 function describeSkill(sk,slot){const desc=SKILL_DESCRIPTIONS[sk.mech]||SKILL_DESCRIPTIONS.default;return {desc,role:slot==='ULTIMATE'?'ULTIMATE':slot,cd:Number(sk.cd||2).toFixed(1)};}
 
-const ET_DATA=[
-["Slime Hijau","slime","",30,6,42,16,"#5acc4a","#2a8a3a",15,8,"chase",.2],["Slime Biru","slime","",36,7,44,17,"#5aaaff","#2a5a8a",18,9,"chase",.25],["Slime Merah","slime","",46,9,40,18,"#ff5a5a","#8a2a2a",22,11,"chase",.3],["Raja Slime","slime","king",200,14,32,32,"#7aff5a","#2a8a3a",130,70,"chase",.5,1],
-["Skeleton","humanoid","bone",55,10,52,17,"#e0e0d0","#8a8a78",26,12,"chase",.4,0,"sword"],["Skeleton Archer","humanoid","bone",48,11,50,17,"#e0e0d0","#8a8a78",28,14,"erratic",.6,0,"bow"],["Zombie","humanoid","zombie",80,12,32,18,"#6a9a5a","#3a5a2a",32,16,"chase",.15],["Guardian Golem","golem","",360,20,28,34,"#8a8a7a","#4a4a3a",220,110,"chase",.5,1],
-["Kelelawar","bat","",30,7,86,13,"#a06cff","#5a2a9a",20,10,"erratic",.7],["Laba-laba","bug","spider",55,9,60,16,"#4a3020","#2a1a10",28,13,"chase",.5],["Jamur Monster","mushroom","",65,10,34,18,"#c06080","#6a2030",30,14,"chase",.2],["Raja Laba-laba","bug","spider",280,16,52,34,"#5a2a1a","#2a0a00",180,90,"chase",.6,1],
-["Goblin","humanoid","goblin",60,11,62,15,"#7aa04a","#3a5a20",30,15,"chase",.5,0,"club"],["Goblin Archer","humanoid","goblin",52,12,58,15,"#7aa04a","#3a5a20",32,16,"erratic",.6,0,"bow"],["Orc","humanoid","orc",110,15,46,22,"#5a8a3a","#2a4a10",50,26,"chase",.4,0,"axe"],["Orc Warlord","humanoid","orc",420,22,44,34,"#3a6a2a","#0a2a00",280,140,"chase",.5,1,"axe"],
-["Kepiting","bug","crab",70,11,50,18,"#e06030","#8a2a10",34,17,"chase",.4],["Sea Slime","slime","",60,10,44,19,"#4ac0d0","#1a6a80",34,17,"chase",.3],["Fishman","humanoid","fish",90,13,58,18,"#4a80b0","#1a4060",44,22,"chase",.5,0,"spear"],["Kraken Mini","dragon","tentacle",460,24,42,36,"#5a2a6a","#2a0a30",300,150,"chase",.55,1],
-["Ice Slime","slime","",70,11,42,18,"#a0e0ff","#4a8ac0",40,20,"chase",.3],["Snow Wolf","beast","wolf",95,14,66,20,"#e8f0f8","#7090b0",50,26,"pounce",.6],["Frost Goblin","humanoid","goblin",75,13,60,16,"#80a0c0","#304860",44,22,"chase",.5,0,"club"],["Ice Golem","golem","",480,26,30,36,"#a8d0e8","#3a5a80",320,160,"chase",.55,1],
-["Lava Slime","slime","",85,13,44,19,"#ff7020","#8a2a00",46,24,"chase",.35],["Fire Imp","imp","",70,14,80,15,"#ff5030","#8a2010",48,25,"erratic",.7],["Fire Serpent","worm","serpent",130,17,58,19,"#ff4020","#8a1000",70,36,"chase",.55],["Lava Golem","golem","",540,28,30,38,"#8a2a1a","#3a0a00",380,190,"chase",.6,1],
-["Angel","winged","holy",110,15,58,20,"#f0f0ff","#a0a0d0",64,32,"chase",.6,0,"sword"],["Sky Archer","winged","holy",95,14,62,19,"#f0f0ff","#a0a0d0",62,30,"erratic",.7,0,"bow"],["Wind Spirit","ghost","spirit",80,16,90,16,"#c8e8ff","#6080b0",60,30,"erratic",.8],["Sky Guardian","winged","holy",620,30,44,40,"#ffe080","#a08020",420,220,"chase",.65,1,"spear"],
-["Treant","treant","",150,16,36,26,"#3a6a2a","#1a3a10",80,40,"chase",.4],["Wood Sprite","ghost","spirit",90,14,78,15,"#a0ffa0","#3a8a3a",70,35,"erratic",.75],["Banshee","ghost","spirit",100,18,70,17,"#e0c0ff","#6a4a8a",85,44,"erratic",.7],["Forest Spirit","treant","",680,32,40,42,"#5aaa3a","#1a5a10",460,240,"chase",.65,1],
-["River Slime","slime","",100,14,46,20,"#40c0a0","#0a6a50",56,28,"chase",.35],["Piranha","beast","fish",80,16,88,16,"#5a80b0","#1a3a60",58,30,"erratic",.7],["Turtle","bug","turtle",180,14,32,24,"#4a8060","#1a4020",90,48,"chase",.3],["River Hydra","dragon","",740,34,42,44,"#40a0a0","#0a5050",500,260,"chase",.65,1],
-["Jellyfish","jellyfish","",120,15,50,18,"#ffa0e0","#8a4080",72,36,"erratic",.6],["Sea Horse","beast","",100,14,78,18,"#80e0d0","#3a8a80",72,36,"erratic",.7],["Merman","humanoid","fish",160,18,58,20,"#4a80c0","#1a4080",100,52,"chase",.55,0,"trident"],["Leviathan","dragon","",800,36,40,46,"#3a5a9a","#0a1a4a",560,290,"chase",.7,1],
-["Sand Worm","worm","",200,18,40,28,"#d0a060","#6a4a20",110,58,"chase",.4],["Scorpion","bug","scorpion",130,20,66,19,"#8a5030","#3a2010",90,48,"chase",.6],["Bandit","humanoid","rogue",150,17,62,18,"#8a5a3a","#4a2a10",95,50,"chase",.6,0,"sword"],["Sand Titan","golem","",860,38,28,46,"#d0a040","#6a4010",600,320,"chase",.65,1],
-["Ninja","humanoid","ninja",170,20,84,17,"#2a2a3a","#0a0a1a",110,58,"erratic",.8,0,"katana"],["Samurai","humanoid","samurai",220,22,58,20,"#4a2a2a","#1a0505",140,72,"chase",.65,0,"katana"],["Bamboo Spirit","treant","bamboo",180,18,60,22,"#7ac04a","#2a5a1a",130,66,"chase",.5],["Bamboo Elder","treant","bamboo",920,40,42,48,"#5aaa3a","#1a4a10",660,340,"chase",.7,1],
-["Imp","imp","",150,20,86,16,"#ff4040","#8a1000",100,54,"erratic",.75],["Demon","winged","demon",240,26,64,22,"#a02030","#4a0510",180,90,"chase",.65,0,"axe"],["Hellhound","beast","wolf",200,24,78,22,"#3a0a0a","#0a0000",160,82,"pounce",.75],["Demon Lord","winged","demon",1000,44,50,50,"#5a0a1a","#1a0005",800,420,"chase",.75,1,"axe"],
-["Wolf","beast","wolf",170,22,76,22,"#a07040","#4a3010",120,62,"pounce",.65],["Rogue","humanoid","rogue",160,20,70,18,"#6a4020","#2a1005",115,60,"chase",.7,0,"dagger"],["Archer Bandit","humanoid","rogue",140,22,66,18,"#6a4020","#2a1005",115,60,"erratic",.7,0,"bow"],["Alpha Wolf","beast","wolf",1060,46,68,48,"#8a5030","#3a1a05",820,440,"pounce",.8,1],
-["Ice Golem","golem","",320,28,32,32,"#a8d0e8","#3a5a80",220,110,"chase",.55],["Frost Archer","humanoid","frost",220,26,70,18,"#c0e0ff","#5080a0",180,90,"erratic",.75,0,"bow"],["Ice Mage","humanoid","mage",200,30,60,18,"#80c0e0","#305070",180,90,"erratic",.7,0,"staff"],["Frost Dragon","dragon","",1120,48,48,50,"#a0d0ff","#305080",880,460,"chase",.8,1],
-["Shadow","ghost","shadow",240,26,80,18,"#3a0a5a","#0a0010",190,96,"erratic",.85],["Wraith","ghost","shadow",260,30,72,20,"#5a2a8a","#1a0520",210,110,"erratic",.8],["Dark Mage","humanoid","mage",280,32,60,20,"#4a106a","#1a0030",230,120,"erratic",.75,0,"staff"],["Shadow Lord","demon","shadow",1200,52,52,52,"#2a0a4a","#0a0010",960,500,"chase",.85,1,"spear"],
-["Sky Goblin","humanoid","goblin",240,26,74,18,"#a0c0e0","#4060a0",190,96,"erratic",.75,0,"club"],["Harpy","winged","harpy",280,30,90,22,"#e0a060","#8a5020",240,120,"erratic",.85,0,"bow"],["Thunder Bird","winged","thunder",320,34,82,24,"#ffe060","#a08010",270,136,"erratic",.8],["Zeus Avatar","king","zeus",1300,56,54,54,"#f0f0ff","#a0a0d0",1040,560,"chase",.85,1,"spear"],
-["Robot","robot","",340,32,52,24,"#a0b0c0","#405060",270,136,"chase",.6],["Drone","robot","drone",260,34,110,18,"#80a0c0","#304860",240,120,"erratic",.85],["Alien","imp","alien",300,36,74,20,"#a060c0","#4a2060",280,140,"erratic",.8],["Mecha Titan","robot","",1400,60,44,56,"#8080a0","#202040",1120,600,"chase",.85,1],
-["Dark Knight","humanoid","knight",420,44,68,22,"#2a1a3a","#0a0515",340,170,"chase",.85,0,"sword"],["Demon Guard","winged","demon",460,48,64,24,"#5a0a20","#1a0005",380,190,"chase",.8,0,"axe"],["Shadow Beast","beast","wolf",440,50,90,24,"#3a0a2a","#0a0010",400,200,"pounce",.9],["Dark King","king","dark",1600,68,54,58,"#1a0030","#000000",1400,700,"chase",.9,1,"sword"]
+/* ===== DATA MUSUH: 100 STAGE x (4 MONSTER + 1 BOS) = 400 MONSTER + 100 BOS ===== */
+/* Format kind: [atlas, pola, varian, senjata, ai, radius, hpX, atkX, spd, sm, skill, warna, warnaGelap] */
+const ENEMY_KINDS={
+slime:[0,'slime','','','chase',17,.9,.9,42,.2,'smash','#5acc4a','#2a8a3a'],
+slimeF:[17,'slime','','','chase',18,1,.9,44,.3,'smash','#5acc4a','#2a8a3a'],
+skel:[4,'humanoid','bone','sword','chase',17,1,1.1,52,.4,'slash','#e0e0d0','#8a8a78'],
+skelA:[5,'humanoid','bone','bow','erratic',17,.9,1.1,50,.6,'volley','#e0e0d0','#8a8a78'],
+zombie:[6,'humanoid','zombie','','chase',18,1.5,1,32,.15,'smash','#6a9a5a','#3a5a2a'],
+golem:[7,'golem','','','chase',28,2.2,1.3,28,.5,'quake','#8a8a7a','#4a4a3a'],
+bat:[8,'bat','','','erratic',13,.55,.8,86,.7,'phase','#a06cff','#5a2a9a'],
+spider:[9,'bug','spider','','chase',16,.9,1,60,.5,'poison','#5a8a3a','#2a4a1a'],
+mush:[10,'mushroom','','','chase',18,1.2,.9,34,.2,'poison','#c06080','#6a2030'],
+goblin:[12,'humanoid','goblin','club','chase',15,1,1,62,.5,'smash','#7aa04a','#3a5a20'],
+goblinA:[13,'humanoid','goblin','bow','erratic',15,.9,1,58,.6,'volley','#7aa04a','#3a5a20'],
+orc:[14,'humanoid','orc','axe','chase',22,1.8,1.3,46,.4,'smash','#5a8a3a','#2a4a10'],
+crab:[16,'bug','crab','','chase',18,1.2,1,50,.4,'smash','#6a9a3a','#2a5a1a'],
+fishman:[18,'humanoid','fish','spear','chase',18,1.1,1.1,58,.5,'pierce','#4a80b0','#1a4060'],
+wolfB:[21,'beast','wolf','','pounce',20,1,1.1,66,.6,'pounce','#6a9ae0','#2a4a8a'],
+fgoblin:[22,'humanoid','goblin','club','chase',16,1,1,60,.5,'smash','#80a0c0','#304860'],
+imp:[25,'imp','','','erratic',15,.8,1,80,.7,'hell','#ff5030','#8a2010'],
+serpent:[26,'worm','serpent','','chase',19,1.3,1.2,58,.55,'flame','#ff4020','#8a1000'],
+sworm:[44,'worm','','','chase',26,1.8,1.1,40,.4,'phase','#d0a060','#6a4a20'],
+angel:[28,'winged','holy','sword','chase',20,1.5,1.2,58,.6,'slash','#f0f0ff','#a0a0d0'],
+sarch:[29,'winged','holy','bow','erratic',19,1.2,1.1,62,.7,'volley','#8ab0f0','#3a5aa0'],
+wspirit:[30,'ghost','spirit','','erratic',16,.9,1.1,90,.8,'phase','#c8e8ff','#6080b0'],
+treant:[32,'treant','','','chase',26,2,1.1,36,.4,'nature','#3a8a3a','#1a4a10'],
+sprite:[33,'ghost','spirit','','erratic',15,.9,1,78,.75,'nature','#a0ffa0','#3a8a3a'],
+banshee:[34,'ghost','spirit','','erratic',17,1,1.2,70,.7,'void','#a0e0a0','#3a7a4a'],
+piranha:[36,'beast','fish','','erratic',16,.8,1.1,88,.7,'pounce','#5ac080','#1a6040'],
+turtle:[38,'bug','turtle','','chase',24,2.5,.9,32,.3,'quake','#4a8060','#1a4020'],
+coral:[39,'jellyfish','','','erratic',20,1.3,1,44,.5,'tide','#40e0d0','#108a80'],
+jelly:[40,'jellyfish','','','erratic',18,1.1,1,50,.6,'tide','#40a0ff','#1a4a9a'],
+seahorse:[41,'beast','','','erratic',18,.9,1,78,.7,'tide','#80e0d0','#3a8a80'],
+merman:[42,'humanoid','fish','trident','chase',20,1.8,1.2,58,.55,'pierce','#4a80c0','#1a4080'],
+scorp:[45,'bug','scorpion','','chase',19,1.1,1.3,66,.6,'poison','#4a70a0','#1a2a50'],
+bandit:[46,'humanoid','rogue','sword','chase',18,1.3,1.1,62,.6,'slash','#8a5a3a','#4a2a10'],
+ninja:[48,'humanoid','ninja','katana','erratic',17,1,1.3,84,.8,'blink','#2a4a8a','#0a1a3a'],
+samurai:[49,'humanoid','samurai','katana','chase',20,1.6,1.3,58,.65,'slash','#4a6aa0','#1a2a50'],
+mush2:[50,'mushroom','','','chase',19,1.3,.9,34,.2,'poison','#c08040','#6a4010'],
+demon:[52,'winged','demon','axe','chase',22,1.8,1.4,64,.65,'hell','#a02030','#4a0510'],
+mothd:[53,'winged','demon','','erratic',20,1.2,1.2,70,.7,'hell','#c07030','#6a3010'],
+hound:[54,'beast','wolf','','pounce',22,1.4,1.3,78,.75,'pounce','#b06030','#4a2010'],
+wolf:[56,'beast','wolf','','pounce',22,1.3,1.2,76,.65,'pounce','#a07040','#4a3010'],
+rogue:[57,'humanoid','rogue','dagger','chase',18,1.1,1.2,70,.7,'blink','#6a4020','#2a1005'],
+banditA:[58,'humanoid','rogue','bow','erratic',18,1,1.2,66,.7,'volley','#6a4020','#2a1005'],
+icerobot:[60,'robot','','','chase',24,1.8,1.2,48,.55,'frost','#80c8ff','#306090'],
+frostA:[61,'humanoid','frost','bow','erratic',18,1,1.3,70,.75,'volley','#c0e0ff','#5080a0'],
+image:[62,'humanoid','mage','staff','erratic',18,1,1.4,60,.7,'frost','#80c0e0','#305070'],
+shadow:[64,'ghost','shadow','','erratic',18,1.1,1.3,80,.85,'void','#7a2aaa','#2a0a4a'],
+wraith:[65,'ghost','shadow','','erratic',20,1.2,1.4,72,.8,'void','#6aaa6a','#1a4a2a'],
+dmage:[66,'humanoid','mage','staff','erratic',20,1,1.4,60,.75,'arcane','#4a8a4a','#1a3a1a'],
+skygob:[68,'humanoid','goblin','club','erratic',18,1.1,1.1,74,.75,'smash','#7aa04a','#3a5a20'],
+harpy:[69,'winged','harpy','bow','erratic',22,1.2,1.2,90,.85,'volley','#9ad040','#4a6a10'],
+tbird:[70,'winged','thunder','','erratic',24,1.4,1.4,82,.8,'storm','#e05040','#8a2010'],
+robot:[72,'robot','','','chase',24,1.8,1.3,52,.6,'quake','#a0b0c0','#405060'],
+drone:[73,'robot','drone','','erratic',18,1,1.3,110,.85,'volley','#80a0c0','#304860'],
+alien:[98,'imp','alien','','erratic',20,1.2,1.4,74,.8,'void','#c060c0','#602060'],
+warrior:[76,'humanoid','knight','sword','chase',20,1.5,1.3,64,.7,'slash','#d04040','#6a1010'],
+moth:[77,'winged','','','erratic',20,1.2,1.2,76,.8,'storm','#e04050','#8a1020'],
+dknight:[86,'humanoid','knight','sword','chase',22,1.7,1.5,68,.85,'slash','#7a3aaa','#2a1a3a'],
+dguard:[82,'winged','demon','axe','chase',24,1.8,1.5,64,.8,'hell','#6a2a8a','#1a0030'],
+sbeast:[78,'beast','wolf','','pounce',24,1.4,1.5,88,.9,'pounce','#6a2a8a','#2a0a3a'],
+pbeast:[85,'beast','','','pounce',24,1.8,1.5,70,.85,'pounce','#7a3aaa','#2a1040'],
+pgolem:[81,'golem','','','chase',30,2.2,1.4,32,.6,'quake','#7a3a9a','#2a1040'],
+pdemon:[89,'winged','demon','','chase',24,1.8,1.5,66,.8,'hell','#8a30b0','#2a0a40'],
+cult:[87,'ghost','cult','','erratic',20,1.2,1.4,62,.8,'arcane','#6a3a9a','#2a1040'],
+ghost:[94,'ghost','','','erratic',20,1.1,1.2,74,.8,'phase','#c0c0c8','#6a6a78'],
+sdemon:[97,'winged','demon','','chase',24,2,1.5,70,.85,'hell','#8a2aaa','#2a0a40'],
+seraph:[96,'winged','holy','sword','chase',22,2,1.4,62,.8,'slash','#f0f0ff','#a0a0d0'],
+icegolem:[23,'golem','','','chase',30,2.4,1.3,30,.55,'frost','#a8d0e8','#3a5a80'],
+lavagolem:[27,'golem','','','chase',30,2.4,1.4,30,.6,'flame','#c04020','#4a0a00'],
+pimp:[91,'imp','','','erratic',18,1.1,1.3,84,.85,'void','#7a2aaa','#2a0a4a']
+};
+
+/* Spesifikasi stage: 4 monster 'Nama|kind|hue' + 1 bos 'Nama|atlas|pola|varian|presetSkill|hue|warna' */
+const STAGE_SPEC=[
+/*0 Forest Entrance*/['Slime Hijau|slime|0','Slime Lumut|slimeF|30','Kelelawar Hutan|bat|0','Jamur Muda|mush|0','Raja Slime|3|slime|king|slime|0|#7aff5a'],
+/*1 Green Meadow*/['Slime Padang|slime|-60','Kupu-Kupu Liar|moth|120','Lebah Pemburu|bat|60','Jamur Bunga|mush2|40','Ratu Kupu-Kupu|53|winged|harpy|winged|100|#80e060'],
+/*2 Forest Path*/['Goblin Pengintai|goblin|0','Serigala Hutan|wolf|0','Laba-laba Jalur|spider|0','Slime Duri|slimeF|-30','Raja Kumbang|11|bug|spider|bug|40|#a08030'],
+/*3 Ruined Village*/['Skeleton Penjaga|skel|0','Zombie Warga|zombie|0','Skeleton Pemanah|skelA|0','Bandit Desa|bandit|0','Zombie Raksasa|6|humanoid|zombie|golem|0|#6a9a5a'],
+/*4 Goblin Camp*/['Goblin Prajurit|goblin|20','Goblin Pemanah|goblinA|20','Goblin Dukun|dmage|20','Hobgoblin|orc|40','Goblin Warchief Zogg|15|humanoid|goblin|knight|20|#7aa04a'],
+/*5 Rocky Hill*/['Golem Kerikil|golem|40','Kepiting Batu|crab|50','Kelelawar Batu|bat|200','Laba-laba Karang|spider|200','Golem Penjaga Bukit|7|golem||golem|40|#a09a60'],
+/*6 Dark Forest*/['Serigala Bayangan|wolfB|60','Laba-laba Malam|spider|140','Banshee Hutan|banshee|0','Treant Gelap|treant|50','Raja Treant Gelap|35|treant||treant|50|#2a8a7a'],
+/*7 Forgotten Ruins*/['Skeleton Kuno|skel|30','Penyihir Tulang|dmage|60','Mumi Reruntuhan|zombie|50','Penjaga Batu Kuno|golem|80','Raja Tengkorak Kuno|80|king|bone|king|0|#e0e0d0'],
+/*8 Sacred Grove*/['Roh Hutan|sprite|0','Peri Suci|sprite|70','Treant Suci|treant|20','Rusa Roh|wolfB|60','Penjaga Hutan Suci|31|winged|holy|winged|90|#60e0a0'],
+/*9 Misty Woods*/['Hantu Kabut|ghost|0','Banshee Kabut|banshee|60','Peri Kabut|sprite|150','Serigala Kabut|wolfB|-30','Wraith Kabut Agung|34|ghost|spirit|ghost|60|#a0e0e0'],
+/*10 Mushroom Forest*/['Jamur Beracun|mush|0','Jamur Spora|mush2|50','Tuan Jamur|mush2|150','Slime Jamur|slime|180','Raja Jamur|51|mushroom||poison|-20|#e07040'],
+/*11 Spider Nest*/['Laba-laba Racun|spider|0','Laba-laba Pemburu|spider|120','Kalajengking Sarang|scorp|0','Laba-laba Jaring|spider|-100','Ratu Laba-laba|11|bug|spider|bug|-30|#c04040'],
+/*12 Goblin Outpost*/['Goblin Penjaga Pos|goblin|50','Pemanah Pos|goblinA|50','Goblin Pelempar|skygob|50','Hobgoblin Veteran|orc|60','Komandan Goblin Gruk|15|humanoid|goblin|knight|60|#40a0a0'],
+/*13 Orc Camp*/['Orc Prajurit|orc|0','Orc Pemanah|banditA|-20','Orc Berserker|orc|30','Troll Rawa|zombie|20','Orc Chieftain|15|humanoid|orc|knight|-30|#8a9a3a'],
+/*14 Orc Fortress*/['Orc Penjaga Benteng|orc|60','Orc Dukun|dmage|100','Orc Pengepung|golem|200','Orc Veteran|orc|-30','Orc Warlord Garrosh|14|humanoid|orc|knight|20|#3a6a2a'],
+/*15 Mountain Pass*/['Serigala Gunung|wolf|-20','Elang Gunung|harpy|0','Golem Gunung|golem|-30','Bandit Gunung|bandit|40','Golem Puncak Gunung|7|golem||golem|120|#6090d0'],
+/*16 Lava Cave*/['Slime Lava|slime|-120','Imp Lava|imp|0','Kelelawar Api|bat|120','Salamander|serpent|0','Magma Serpent|26|dragon|serpent|fire|20|#ff6a20'],
+/*17 Crystal Cave*/['Slime Kristal|slime|120','Laba-laba Kristal|spider|100','Golem Kristal|golem|150','Kelelawar Kristal|bat|-60','Crystal Colossus|23|golem||ice|200|#c080ff'],
+/*18 Sea Coast*/['Kepiting Pantai|crab|270','Slime Laut|slime|90','Fishman Pantai|fishman|0','Piranha Pantai|piranha|0','Raja Kepiting Karang|16|bug|crab|bug|270|#e06030'],
+/*19 Kraken Lair*/['Gurita Kecil|jelly|100','Fishman Penyelam|fishman|40','Kepiting Gua Laut|crab|180','Seahorse Gelap|seahorse|100','Kraken|19|dragon|tentacle|ocean|60|#5a2a9a'],
+/*20 Ice Field*/['Slime Es|slime|100','Serigala Salju|wolfB|0','Goblin Beku|fgoblin|0','Rubah Es|wolfB|40','Frost Fang Alpha|21|beast|wolf|ice|0|#80c0ff'],
+/*21 Snow Valley*/['Golem Salju|icegolem|0','Serigala Lembah|wolfB|20','Prajurit Salju|skel|180','Penyihir Salju|image|0','Raksasa Salju|23|golem||ice|-20|#a8d0e8'],
+/*22 Frost Cavern*/['Kelelawar Es|bat|-60','Laba-laba Es|spider|90','Pemanah Beku|frostA|0','Robot Es|icerobot|0','Archmage Gua Beku|62|humanoid|mage|ice|40|#80c0e0'],
+/*23 Ice Golem Ruins*/['Golem Es Kecil|icegolem|20','Skeleton Beku|skel|200','Penyihir Es Reruntuhan|image|20','Wraith Es|wraith|80','Ancient Ice Golem|23|golem||ice|0|#a8d0e8'],
+/*24 Volcano Field*/['Slime Magma|slime|-120','Imp Api|imp|-20','Ular Api|serpent|0','Golem Magma|lavagolem|0','Lava Titan|27|golem||fire|0|#ff7020'],
+/*25 Fire Realm*/['Imp Neraka Api|imp|20','Burung Api|moth|0','Ular Inferno|serpent|20','Golem Bara|lavagolem|-20','Ifrit Lord|55|winged|demon|fire|-20|#ff6020'],
+/*26 Dragon Lair*/['Naga Muda|serpent|-20','Imp Naga|imp|-30','Kobold Naga|skygob|-80','Pelindung Naga|lavagolem|30','Elder Dragon|63|dragon||dragon|150|#ff5030'],
+/*27 Magma Temple*/['Golem Kuil Magma|lavagolem|20','Pendeta Api|dmage|-100','Imp Kuil|imp|10','Samurai Api|samurai|150','Magma Guardian|47|golem||fire|-30|#ff8030'],
+/*28 Sky Shrine*/['Malaikat Kuil|angel|0','Pemanah Langit|sarch|0','Roh Angin|wspirit|0','Burung Kuil|tbird|60','Sky Shrine Guardian|31|winged|holy|winged|0|#ffe080'],
+/*29 Floating Islands*/['Harpy Pulau|harpy|0','Roh Awan|wspirit|60','Peri Langit|sprite|90','Kupu-Kupu Awan|moth|200','Griffin Lord|69|winged|harpy|winged|40|#e0c040'],
+/*30 Wind Hill*/['Roh Angin Bukit|wspirit|-30','Burung Badai|tbird|120','Harpy Angin|harpy|-30','Elang Bukit|sarch|60','Storm Roc|70|winged|thunder|thunder|120|#80e0ff'],
+/*31 Sky Castle*/['Penjaga Langit|angel|30','Pemanah Istana Langit|sarch|40','Burung Petir|tbird|180','Ksatria Awan|seraph|0','Archangel Castellan|96|winged|holy|winged|0|#f0f0ff'],
+/*32 Ancient Tree*/['Treant Tua|treant|0','Peri Pohon|sprite|0','Jamur Akar|mush2|20','Roh Kayu|banshee|90','Ancient Treant|35|treant||treant|0|#5aaa3a'],
+/*33 Forest Shrine*/['Penjaga Kuil Hutan|treant|-20','Roh Kuil Hutan|sprite|40','Wisp Hijau|wspirit|90','Rusa Kuil|wolfB|80','Shrine Warden Vine|39|treant||treant|-60|#50d060'],
+/*34 Haunted Forest*/['Hantu Hutan|ghost|0','Wraith Hutan|wraith|0','Banshee Kutukan|banshee|-60','Pohon Berhantu|treant|-150','Haunted Wraith King|94|ghost||ghost|40|#c0c0c8'],
+/*35 Spirit Lake*/['Roh Danau|wspirit|60','Nimfa Danau|sprite|120','Banshee Danau|banshee|130','Wraith Danau|wraith|110','Lake Spirit Queen|65|ghost|spirit|ghost|100|#60c0ff'],
+/*36 River Village*/['Slime Sungai|slime|90','Piranha Sungai|piranha|20','Kepiting Sungai|crab|-20','Fishman Desa|fishman|-40','River Serpent|44|worm||ocean|0|#40c0c0'],
+/*37 Swamp*/['Slime Rawa|slime|-40','Kodok Beracun|crab|80','Zombie Rawa|zombie|60','Lintah Raksasa|sworm|120','Swamp Abomination|6|humanoid|zombie|poison|-50|#70a040'],
+/*38 Turtle Island*/['Kura-kura Muda|turtle|0','Kepiting Pulau|crab|300','Piranha Pulau|piranha|60','Merman Pulau|merman|60','Giant Turtle King|38|bug|turtle|golem|0|#4a8060'],
+/*39 Hydra Lake*/['Hydra Kecil|coral|-40','Ular Danau|serpent|140','Lintah Danau|sworm|90','Piranha Danau|piranha|130','Hydra|39|dragon||dragon|40|#40a0a0'],
+/*40 Jellyfish Sea*/['Ubur-ubur Biru|jelly|0','Ubur Listrik|jelly|80','Kuda Laut|seahorse|0','Ubur Kegelapan|jelly|-100','Giant Jellyfish King|40|jellyfish||ocean|0|#ffa0e0'],
+/*41 Coral Reef*/['Kepiting Karang|crab|190','Kuda Laut Karang|seahorse|120','Anemon Karang|coral|140','Merman Karang|merman|-30','Coral Crab Emperor|16|bug|crab|ocean|140|#ff8090'],
+/*42 Underwater Ruins*/['Penyelam Hantu|ghost|150','Merman Reruntuhan|merman|90','Ubur Reruntuhan|jelly|150','Penjaga Laut|golem|100','Abyssal Squid|19|dragon|tentacle|ocean|120|#50a0ff'],
+/*43 Leviathan Depths*/['Piranha Dalam|piranha|-60','Ubur Laut Dalam|jelly|-60','Merman Abyss|merman|-60','Kuda Laut Abyss|seahorse|-70','Leviathan|43|dragon||ocean|0|#3a5a9a'],
+/*44 Desert Dunes*/['Cacing Pasir|sworm|0','Kalajengking Pasir|scorp|40','Bandit Gurun|bandit|20','Mumi Gurun|zombie|60','Dune Sandworm|44|worm||bug|0|#d0a060'],
+/*45 Sand Temple*/['Mumi Kuil|zombie|70','Penjaga Kuil Pasir|golem|60','Skeleton Pasir|skel|60','Pendeta Pasir|dmage|-60','Sand Temple Colossus|47|golem||golem|0|#d0a040'],
+/*46 Bandit Hideout*/['Bandit Pemula|bandit|0','Bandit Pemanah|banditA|0','Rogue Bandit|rogue|0','Bandit Berat|orc|130','Bandit King|46|humanoid|rogue|knight|0|#8a5a3a'],
+/*47 Sand Fortress*/['Kalajengking Benteng|scorp|-30','Prajurit Pasir|samurai|60','Penjaga Benteng Pasir|robot|60','Cacing Benteng|sworm|60','Giant Scorpion Emperor|45|bug|scorpion|bug|-30|#8a5030'],
+/*48 Ninja Hideout*/['Ninja Murid|ninja|0','Ninja Merah|ninja|130','Shuriken Master|rogue|-40','Samurai Penjaga|samurai|0','Shadow Ninja Grandmaster|48|humanoid|ninja|ninja|0|#2a2a3a'],
+/*49 Samurai Castle*/['Samurai Prajurit|samurai|0','Samurai Pemanah|banditA|60','Ronin|samurai|90','Ninja Istana|ninja|60','Shogun|49|humanoid|samurai|samurai|0|#4a2a2a'],
+/*50 Bamboo Forest*/['Roh Bambu|treant|40','Kumbang Bambu|spider|60','Ninja Bambu|ninja|-60','Macan Bambu|wolf|30','Bamboo Elder|35|treant|bamboo|treant|40|#5aaa3a'],
+/*51 Bamboo Temple*/['Biksu Bambu|samurai|-100','Roh Kuil Bambu|sprite|30','Penjaga Kuil Bambu|golem|40','Ninja Kuil|ninja|100','Bamboo Temple Sensei|49|humanoid|samurai|samurai|100|#80c040'],
+/*52 Imp Cavern*/['Imp Gua|imp|0','Imp Biru|imp|150','Kelelawar Iblis|bat|40','Imp Penyihir|dmage|-100','Imp Overlord|25|imp||demon|0|#ff4040'],
+/*53 Demon Gate*/['Iblis Gerbang|demon|0','Setan Kecil|mothd|0','Imp Gerbang|imp|-30','Ksatria Iblis|warrior|0','Gatekeeper Demon|52|winged|demon|demon|0|#a02030'],
+/*54 Hellhound Pit*/['Anjing Neraka|hound|0','Anjing Bara|hound|-30','Imp Jurang|imp|20','Iblis Jurang|demon|40','Cerberus|54|beast|wolf|beast|0|#b06030'],
+/*55 Demon Realm*/['Iblis Wilayah|demon|20','Succubus|moth|-30','Hellhound Realm|hound|40','Ksatria Neraka|warrior|-20','Demon Lord|55|winged|demon|demon|0|#a02030'],
+/*56 Wolf Forest*/['Serigala Lebat|wolf|0','Serigala Hitam|wolf|200','Serigala Putih|wolfB|0','Pemburu Serigala|rogue|0','Dire Wolf|56|beast|wolf|beast|0|#a07040'],
+/*57 Rogue Hideout*/['Perampok|rogue|0','Pencuri Bayangan|ninja|-40','Pemanah Pencuri|banditA|-40','Kepala Preman|bandit|-30','Master Thief|57|humanoid|rogue|ninja|0|#6a4020'],
+/*58 Archer Camp*/['Pemanah Pemula|banditA|40','Pemanah Elit|sarch|20','Penembak Jitu|frostA|-40','Pemanah Hutan|goblinA|-60','Archer Captain|58|humanoid|rogue|ninja|40|#c09040'],
+/*59 Alpha Wolf Den*/['Serigala Pack|wolf|-30','Serigala Pemburu|wolfB|-60','Serigala Bengis|wolf|20','Serigala Penjaga|hound|-30','Alpha Wolf|59|beast|wolf|beast|0|#8a5030'],
+/*60 Ice Mountain*/['Serigala Gunung Es|wolfB|0','Yeti Muda|icegolem|-30','Pemanah Gunung Es|frostA|20','Slime Gunung Es|slime|110','Glacier Wolf King|59|beast|wolf|ice|170|#a0d0ff'],
+/*61 Frozen Tower*/['Penjaga Menara Es|icegolem|30','Pemanah Menara Es|frostA|30','Penyihir Menara Es|image|50','Ksatria Beku|samurai|-30','Tower Frost Lord|61|humanoid|frost|ice|0|#c0e0ff'],
+/*62 Ice Mage Temple*/['Penyihir Es Muda|image|0','Penyihir Salju Kuil|image|60','Pendeta Es|image|-50','Roh Es|wspirit|120','Archmage of Ice|62|humanoid|mage|ice|0|#80c0e0'],
+/*63 Frost Dragon Nest*/['Naga Es Kecil|serpent|150','Pemanah Naga Es|frostA|-50','Penjaga Sarang Es|icegolem|50','Ksatria Naga Es|samurai|20','Frost Dragon|63|dragon||ice|0|#a0d0ff'],
+/*64 Shadow Forest*/['Bayangan Hutan|shadow|0','Wraith Gelap|wraith|90','Serigala Bayangan Gelap|sbeast|0','Penyihir Hutan Gelap|dmage|150','Shadow Wolf Lord|78|beast|wolf|void|0|#8a3ad0'],
+/*65 Wraith Realm*/['Wraith Muda|wraith|120','Wraith Kegelapan|wraith|-120','Bayangan Dunia Wraith|shadow|60','Banshee Dunia|banshee|120','Wraith King|65|ghost|shadow|ghost|150|#9a50e0'],
+/*66 Dark Tower*/['Penyihir Menara Gelap|dmage|150','Kultus Menara|cult|0','Ksatria Menara|dknight|0','Bayangan Menara|shadow|30','Dark Tower Sorcerer|66|humanoid|mage|witch|150|#8a4abf'],
+/*67 Shadow Lord Castle*/['Ksatria Bayangan|dknight|30','Penjaga Bayangan|dguard|0','Bayangan Istana|shadow|-30','Kultus Bayangan|cult|-40','Shadow Lord|67|demon|shadow|void|0|#6a2aaa'],
+/*68 Sky Realm*/['Malaikat Realm|angel|60','Pemanah Realm|sarch|-60','Roh Realm|wspirit|-60','Harpy Realm|harpy|120','Sky Realm Seraph|28|winged|holy|winged|60|#ffe080'],
+/*69 Harpy Nest*/['Harpy Sarang|harpy|40','Harpy Pemanah|harpy|-40','Harpy Petir|tbird|90','Kupu-Kupu Harpy|moth|80','Harpy Queen|69|winged|harpy|winged|-40|#e0a060'],
+/*70 Thunder Plains*/['Burung Petir Dataran|tbird|60','Roh Petir|wspirit|40','Goblin Petir|skygob|100','Golem Petir|robot|100','Thunderbird|70|winged|thunder|thunder|60|#ffe060'],
+/*71 Zeus Temple*/['Penjaga Kuil Zeus|seraph|40','Pemanah Zeus|sarch|80','Burung Zeus|tbird|30','Golem Kuil Zeus|golem|150','Zeus Avatar|71|king|zeus|thunder|0|#f0f0ff'],
+/*72 Robot Factory*/['Robot Pekerja|robot|0','Robot Las|robot|60','Drone Pabrik|drone|0','Golem Besi|golem|180','Factory Overseer|72|robot||robot|0|#a0b0c0'],
+/*73 Drone Base*/['Drone Pengintai|drone|60','Drone Tempur|drone|-60','Robot Penjaga|robot|-40','Robot Pelempar|icerobot|40','Drone Mothership|73|robot|drone|robot|-60|#80a0c0'],
+/*74 Alien Ruins*/['Alien Muda|alien|0','Alien Prajurit|alien|60','Drone Alien|drone|120','Golem Alien|pgolem|60','Alien Hive Queen|98|imp|alien|alien|0|#c060ff'],
+/*75 Mecha Hangar*/['Mecha Ringan|robot|-30','Mecha Berat|pgolem|0','Drone Hangar|drone|-120','Mecha Penembak|icerobot|-60','Mecha Titan|75|robot||robot|0|#8080a0'],
+/*76 Dark Fortress*/['Ksatria Gelap|dknight|0','Penjaga Benteng Gelap|dguard|30','Pemanah Gelap|banditA|150','Golem Gelap|pgolem|0','Dark Fortress Warlord|86|humanoid|knight|knight|0|#7a3aaa'],
+/*77 Demon Guard Post*/['Penjaga Iblis|dguard|-30','Ksatria Iblis Gelap|dknight|-60','Iblis Pos|pdemon|0','Anjing Iblis Pos|sbeast|60','Demon Guard Captain|82|winged|demon|demon|-30|#8a2a60'],
+/*78 Shadow Beast Lair*/['Bayangan Binatang|sbeast|-30','Binatang Gelap|pbeast|0','Serigala Bayangan Lair|sbeast|60','Bayangan Lair|shadow|90','Shadow Beast Alpha|85|beast|wolf|beast|0|#7a3aaa'],
+/*79 Dark Throne*/['Pengawal Takhta|dguard|60','Ksatria Takhta|dknight|-20','Penyihir Takhta|cult|60','Golem Takhta|pgolem|40','Throne Tyrant|79|king|dark|king|0|#d04060'],
+/*80 Cursed Graveyard*/['Skeleton Kuburan|skel|-60','Zombie Kuburan|zombie|-40','Hantu Kuburan|ghost|40','Ghoul|zombie|120','Grave Lich|80|king|bone|king|0|#e0e0f0'],
+/*81 Death City*/['Skeleton Kota Mati|skel|90','Zombie Kota Mati|zombie|140','Wraith Kota Mati|wraith|-60','Ksatria Kota Mati|warrior|-120','Death City Colossus|84|golem||golem|0|#8a40c0'],
+/*82 Necromancer Tower*/['Murid Necromancer|cult|-60','Skeleton Necromancer|skel|-30','Hantu Menara Maut|ghost|-60','Zombie Menara Maut|zombie|180','Archnecromancer|87|ghost|cult|witch|0|#a060ff'],
+/*83 Void Rift*/['Pengembara Void|alien|-60','Bayangan Void|shadow|-60','Kultus Void|cult|90','Imp Void|pimp|0','Void Rift Walker|90|demon||void|0|#c040ff'],
+/*84 Fallen Angel Ruins*/['Malaikat Jatuh|angel|200','Pemanah Jatuh|sarch|200','Iblis Jatuh|pdemon|60','Roh Jatuh|wspirit|200','Fallen Seraph|96|winged|holy|winged|240|#c04080'],
+/*85 Celestial Gate*/['Penjaga Gerbang Langit|seraph|60','Malaikat Gerbang|angel|-60','Pemanah Surgawi|sarch|-120','Burung Surgawi|tbird|140','Celestial Gatekeeper|31|winged|holy|winged|90|#80d0ff'],
+/*86 Warlock Sanctum*/['Warlock Murid|dmage|200','Warlock Elit|cult|30','Familiar Warlock|imp|-60','Golem Rune|pgolem|-60','Grand Warlock|66|humanoid|mage|witch|200|#c050e0'],
+/*87 Chrono Tower*/['Robot Waktu|robot|200','Penjaga Waktu|icerobot|120','Hantu Waktu|ghost|120','Drone Waktu|drone|200','Chrono Guardian|75|robot|time|time|200|#c080ff'],
+/*88 Shapeshifter Lab*/['Eksperimen A|pbeast|-60','Eksperimen B|alien|-60','Mutan Lab|zombie|-100','Mutan Cepat|sbeast|-90','Chimera Prime|92|beast||alien|0|#a040e0'],
+/*89 Legendary Hero Tomb*/['Pahlawan Gugur|warrior|40','Skeleton Pahlawan|skel|120','Hantu Pahlawan|ghost|-30','Penjaga Makam|samurai|-70','Fallen Legendary Hero|79|king|hero|knight|0|#ffd040'],
+/*90 Rogue King Keep*/['Pengawal Raja Rogue|rogue|30','Pembunuh Keep|ninja|-120','Pemanah Keep|banditA|90','Ksatria Keep|dknight|90','Rogue King|83|king|rogue|king|0|#a050e0'],
+/*91 Mage Queen Palace*/['Penyihir Istana|image|-60','Penyihir Kegelapan Istana|dmage|120','Pelayan Sihir|cult|120','Golem Ratu|pgolem|100','Mage Queen|95|king|mage|witch|100|#e060ff'],
+/*92 Dragon Queen Lair*/['Naga Ratu Muda|serpent|40','Pengawal Naga|dguard|120','Ksatria Naga|warrior|40','Imp Naga Ratu|imp|50','Dragon Queen|63|dragon||dragon|180|#ff40a0'],
+/*93 Shadow Queen Castle*/['Dayang Bayangan|shadow|150','Ksatria Ratu Bayangan|dknight|120','Penyihir Ratu Bayangan|cult|150','Hantu Ratu Bayangan|ghost|240','Shadow Queen|96|winged|shadow|void|250|#a040e0'],
+/*94 Forest Queen*/['Dayang Hutan|sprite|120','Treant Ratu Hutan|treant|-20','Rusa Ratu Hutan|wolfB|100','Peri Ratu Hutan|wspirit|40','Forest Queen|35|treant|queen|treant|20|#70d070'],
+/*95 Storm Queen*/['Roh Badai|wspirit|180','Burung Badai Ratu|tbird|170','Harpy Ratu Badai|harpy|180','Penjaga Badai|seraph|-60','Storm Queen|70|winged|thunder|thunder|180|#60a0ff'],
+/*96 Light King*/['Prajurit Cahaya|seraph|40','Pemanah Cahaya|sarch|40','Malaikat Cahaya|angel|40','Golem Cahaya|icegolem|60','Light King|71|king|holy|winged|40|#fff0a0'],
+/*97 Dark King*/['Ksatria Raja Gelap|dknight|-30','Pengawal Raja Gelap|dguard|-60','Penyihir Raja Gelap|cult|-30','Golem Raja Gelap|pgolem|-60','Dark King|95|king|dark|void|200|#8a30c0'],
+/*98 Eclipse Lord*/['Pelayan Eclipse|pdemon|60','Pengawal Eclipse|dguard|90','Bayangan Eclipse|shadow|-90','Penyihir Eclipse|cult|-90','Eclipse Lord|97|demon|eclipse|void|0|#ff40d0'],
+/*99 The Eclipse God*/['Pendeta Eclipse|cult|60','Malaikat Eclipse|seraph|220','Iblis Eclipse|sdemon|40','Hantu Eclipse|ghost|-120','The Eclipse God|99|demon|god|void|0|#ff00a0']
 ];
-const ET=ET_DATA.map(a=>({n:a[0],p:a[1],v:a[2]||'',hp:a[3],atk:a[4],spd:a[5],r:a[6],c:a[7],cd:a[8],xp:a[9],g:a[10],ai:a[11],sm:a[12],boss:!!a[13],w:a[14]||''}));
+
+function _hex2rgb(h){h=h.replace('#','');return[parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)];}
+function _rgb2hex(r,g,b){return'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
+function _hueShiftHex(hex,deg){
+  if(!deg)return hex;
+  const [r,g,b]=_hex2rgb(hex).map(v=>v/255);
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn,l=(mx+mn)/2;
+  let h=0,s=0;
+  if(d>0){s=d/(1-Math.abs(2*l-1));if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360;}
+  h=((h+deg)%360+360)%360;
+  const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2;
+  let rr=0,gg=0,bb=0;
+  if(h<60){rr=c;gg=x;}else if(h<120){rr=x;gg=c;}else if(h<180){gg=c;bb=x;}else if(h<240){gg=x;bb=c;}else if(h<300){rr=x;bb=c;}else{rr=c;bb=x;}
+  return _rgb2hex((rr+m)*255,(gg+m)*255,(bb+m)*255);
+}
+function _darkenHex(hex,f){const [r,g,b]=_hex2rgb(hex);return _rgb2hex(r*f,g*f,b*f);}
+
+const STAGE_POOLS=[];
+const ET=[];
+const _seenM=new Set(),_seenB=new Set();
+(function buildEnemyData(){
+  const hpSlot=[.85,1,1.15,1.3],atkSlot=[.9,1,1.08,1.18],xpSlot=[.85,.95,1.05,1.15];
+  for(let i=0;i<STAGE_SPEC.length;i++){
+    const spec=STAGE_SPEC[i],t=i/(STAGE_SPEC.length-1),pool=[];
+    for(let s=0;s<4;s++){
+      const [name,key,hueS]=spec[s].split('|'),k=ENEMY_KINDS[key];let hue=parseInt(hueS)||0;while(_seenM.has(k[0]+':'+hue))hue+=23;_seenM.add(k[0]+':'+hue);
+      const c=_hueShiftHex(k[11],hue),cd=_hueShiftHex(k[12],hue);
+      ET.push({n:name,p:k[1],v:k[2],hp:Math.round(30*Math.pow(15,t)*k[6]*hpSlot[s]),atk:Math.max(3,Math.round(6*Math.pow(8.3,t)*k[7]*atkSlot[s])),spd:Math.round(k[8]*(1+.1*t)),r:k[5]+Math.round(t*3),c,cd,xp:Math.round(15*Math.pow(26,t)*xpSlot[s]),g:Math.round(8*Math.pow(25,t)*xpSlot[s]),ai:k[4],sm:Math.min(.9,k[9]+.25*t),boss:false,w:k[3],a:k[0],th:hue,sp:k[10],bp:'',si:i,kind:key});
+      pool.push([ET.length-1,[1,.8,.55,.4][s]]);
+    }
+    const [bn,ba,bp,bv,bpre,bh,bc]=spec[4].split('|'),bigP=(bp==='golem'||bp==='dragon'||bp==='king'),fastP=(bp==='ghost'||bp==='beast'||bv==='ninja');
+    const hpF=bp==='golem'?1.1:bp==='dragon'?1.15:bp==='king'?1.05:bp==='ghost'?.85:1;
+    let bhue=parseInt(bh)||0;while(_seenB.has(ba+':'+bhue))bhue+=23;_seenB.add(ba+':'+bhue);const bcol=_hueShiftHex(bc||'#ff3050',bhue-(parseInt(bh)||0));
+    ET.push({n:bn,p:bp,v:bv||'',hp:Math.round(200*Math.pow(8,t)*hpF),atk:Math.round(14*Math.pow(4.9,t)),spd:Math.round(34+t*22+(fastP?8:0)-(bigP?4:0)),r:Math.round(32+20*t+(bigP?4:0)-(fastP&&bp==='ghost'?4:0)),c:bcol,cd:_darkenHex(bcol,.45),xp:Math.round(130*Math.pow(10.8,t)),g:Math.round(70*Math.pow(10,t)),ai:'chase',sm:Math.min(.95,.5+.4*t),boss:true,w:'',a:parseInt(ba),th:bhue,sp:'boss',bp:bpre,si:i,kind:'boss'});
+    STAGE_POOLS.push({pool,boss:ET.length-1,names:spec.slice(0,4).map(x=>x.split('|')[0]),bossName:bn});
+  }
+})();
+
 
 function bossDmg(b,mult=1){const norm=getStageDifficultyNorm(stageIndex);return Math.max(2,Math.round(b.atk*mult*(1+norm*2.2)));}
 const BOSS_SKILLS={
@@ -2623,7 +2846,8 @@ void:{id:'void',name:'VOID RIFT',icon:'🌌',color:'#4a2080',cd:8.5,minRange:100
 orbit:{id:'orbit',name:'DEATH ORBIT',icon:'⚔️',color:'#ff80ff',cd:6.5,minRange:0,maxRange:600,cast:0.7,weight:1.1,exec(b){const cnt=10,dmg=bossDmg(b,0.85);for(let i=0;i<cnt;i++){const a=i/cnt*Math.PI*2;const orb={x:b.x+Math.cos(a)*150,y:b.y+Math.sin(a)*150,ang:a,R:150,speed:3.2,life:3.0,maxLife:3.0,boss:b._id,dmg,color:b.c,hitCooldown:0};projectiles.push({_orb:true,orbit:orb,x:orb.x,y:orb.y,vx:0,vy:0,dmg,life:3.0,color:b.c,r:8,pat:'orb',style:'orb',fromEnemy:true,targetPlayer:true,ignore:true});}addVfx({type:'spiral',x:b.x,y:b.y,color:b.c,r:200,life:1.0,cnt:8,rotSpeed:6});toast('⚔️ DEATH ORBIT!');}}
 };
 const BOSS_SKILL_PRESETS={slime:['slam','summon','ringBullets','shock'],golem:['slam','shock','guillotine','summon'],beast:['dash','slam','summon','homing'],bug:['slam','volley','dash','summon'],humanoid:['dash','volley','nova','homing'],winged:['volley','dash','homing','meteor'],demon:['flame','meteor','dash','drain'],dragon:['flame','beam','meteor','shock'],ghost:['homing','drain','teleport','nova'],robot:['beam','volley','ringBullets','shock'],king:['guillotine','meteor','thunder','summon'],treant:['summon','shock','frost','drain'],ice:['frost','guillotine','volley','shock'],fire:['flame','meteor','dash','shock'],thunder:['thunder','dash','beam','ringBullets'],time:['timeSlow','beam','homing','nova'],void:['blackhole','void','teleport','drain'],poison:['summon','drain','slam','volley'],ocean:['volley','shock','summon','frost'],samurai:['dash','guillotine','teleport','ringBullets'],ninja:['teleport','dash','ringBullets','volley'],knight:['dash','slam','guillotine','shock'],emperor:['guillotine','beam','meteor','summon'],alien:['beam','homing','ringBullets','void'],witch:['homing','summon','void','meteor'],default:['slam','volley','dash','nova']};
-function getBossSkillSet(bossName,def){const n=(bossName||'').toLowerCase();const v=(def.v||'').toLowerCase();const stageName=(STAGES[stageIndex]||{}).n?.toLowerCase()||'';const all=n+' '+v+' '+stageName;
+function getBossSkillSet(bossName,def){
+if(def&&def.bp&&BOSS_SKILL_PRESETS[def.bp]){const base=BOSS_SKILL_PRESETS[def.bp].slice(),si=def.si|0;if(si>=8){const alts=['spiral','mirror','homing','ringBullets','beam','timeSlow','teleport','nova','shock','summon','drain','guillotine','meteor','thunder'].filter(x=>!base.includes(x)&&BOSS_SKILLS[x]);if(alts.length){base[1+(si%3)]=alts[si%alts.length];if(si>=40){const k=1+((si+1)%3),alt=alts[(si*3+1)%alts.length];if(!base.includes(alt))base[k]=alt;}}}return base;}const n=(bossName||'').toLowerCase();const v=(def.v||'').toLowerCase();const stageName=(STAGES[stageIndex]||{}).n?.toLowerCase()||'';const all=n+' '+v+' '+stageName;
 if(/zeus|thunder|sky/.test(all))return BOSS_SKILL_PRESETS.thunder;if(/dragon|drake|wyrm|hydra|leviathan/.test(all))return BOSS_SKILL_PRESETS.dragon;if(/ice|frost|snow|glacier/.test(all))return BOSS_SKILL_PRESETS.ice;if(/fire|lava|magma|inferno|volcan/.test(all))return BOSS_SKILL_PRESETS.fire;if(/void|abyss|shadow|nightmare|dark king/.test(all))return BOSS_SKILL_PRESETS.void;if(/slime/.test(all))return BOSS_SKILL_PRESETS.slime;if(/golem|titan|colossus|guardian/.test(all))return BOSS_SKILL_PRESETS.golem;if(/kraken|sea|tide|ocean/.test(all))return BOSS_SKILL_PRESETS.ocean;if(/demon|hell|devil/.test(all))return BOSS_SKILL_PRESETS.demon;if(/wolf|beast|hound|fang/.test(all))return BOSS_SKILL_PRESETS.beast;if(/spider|insect|scorpion|crab/.test(all))return BOSS_SKILL_PRESETS.bug;if(/robot|mecha|tech|drone/.test(all))return BOSS_SKILL_PRESETS.robot;if(/angel|holy|seraph/.test(all))return BOSS_SKILL_PRESETS.winged;if(/ghost|spirit|wraith|soul|phantom/.test(all))return BOSS_SKILL_PRESETS.ghost;if(/samurai|ronin|ninja/.test(all))return BOSS_SKILL_PRESETS.samurai;if(/knight|paladin|warlord|gladiator/.test(all))return BOSS_SKILL_PRESETS.knight;if(/emperor|king|queen|lord/.test(all))return BOSS_SKILL_PRESETS.king;if(/witch|mage|sorcerer|wizard|warlock/.test(all))return BOSS_SKILL_PRESETS.witch;if(/poison|plague|toxic|venom/.test(all))return BOSS_SKILL_PRESETS.poison;if(/forest|treant|bamboo|wood/.test(all))return BOSS_SKILL_PRESETS.treant;if(/alien/.test(all))return BOSS_SKILL_PRESETS.alien;if(/time|chronos/.test(all))return BOSS_SKILL_PRESETS.time;return BOSS_SKILL_PRESETS.default;}
 function attachBossConfig(e,def){const skillIds=getBossSkillSet(e.name,def);const cfg={skills:skillIds.map((id,idx)=>{const base=BOSS_SKILLS[id];if(!base)return null;const minPhase=idx<2?0:(idx===2?1:2);return Object.assign({},base,{minPhase});}).filter(Boolean)};e.bossConfig=cfg;e.bossPhase=0;e._skillCds={};for(const s of cfg.skills)e._skillCds[s.id]=rand(0.5,1.5);e.globalCd=1.2;e.castTimer=0;e.castSkill=null;e.castTarget=null;e._pullField=null;e.shieldReflectUntil=0;}
 function updateBossPhase(e){const pct=e.hp/e.maxHp;let targetPhase=0;if(pct<=0.35)targetPhase=2;else if(pct<=0.70)targetPhase=1;if(targetPhase>(e.bossPhase|0)){e.bossPhase=targetPhase;bossPhaseTransition(e,targetPhase);}}
@@ -2636,32 +2860,10 @@ b.globalCd=(b.globalCd||1)-dt;if(b.globalCd<=0){const sk=pickBossSkill(b,d);if(s
 bossMovement(b,dt,dx,dy,d);
 if(d<b.r+player.r+22&&b.attackCd<=0&&player.inv<=0&&!dying){b.attackCd=0.75;const dmg=bossDmg(b,1.15);if(player.defendTimer>0){}hp-=(player.defendTimer>0?Math.round(dmg*(1-(player.shieldReduction||.5))):dmg);player.inv=0.42;floatText(player.x+rand(-6,6),player.y-28,'-'+dmg,'#ff7182');burst(player.x,player.y,b.c,12,{spd:170});addShake(.22);screenFlash(.1);hitStopNow(.04);}}
 
-const STAGES=[
-{n:'HUTAN AWAL',s1:'#234a2c',s2:'#173521',p:'#6a563c',d:'#7acc5a',pool:[[0,1],[1,.7],[2,.4]],boss:3,goal:6,elite:.08,desc:'Hutan tenang, tempat petualangan dimulai.'},
-{n:'RERUNTUHAN KURO',s1:'#2a2a35',s2:'#151520',p:'#4a4a55',d:'#9090a0',pool:[[4,.7],[5,.5],[6,.6]],boss:7,goal:8,elite:.10,desc:'Sisa-sisa peradaban lama.'},
-{n:'GUA GELAP',s1:'#1a1a2a',s2:'#0a0515',p:'#2a2030',d:'#6040a0',pool:[[8,1],[9,.6],[10,.5]],boss:11,goal:10,elite:.12,desc:'Kegelapan menyimpan rahasia.'},
-{n:'KAMPUNG TERBENGKALAI',s1:'#3a2a20',s2:'#1a1008',p:'#6a4a30',d:'#c0a060',pool:[[12,.8],[13,.6],[14,.4]],boss:15,goal:12,elite:.14,desc:'Desa yang ditinggalkan.'},
-{n:'PANTAI BERBATU',s1:'#3a5a70',s2:'#1a3040',p:'#c0a870',d:'#80d0e0',pool:[[16,1],[17,.7],[18,.5]],boss:19,goal:14,elite:.15,desc:'Ombak yang indah, penuh ancaman.'},
-{n:'HUTAN SALJU',s1:'#5a7a90',s2:'#2a4050',p:'#a0b0c0',d:'#ffffff',pool:[[20,1],[21,.7],[22,.5]],boss:23,goal:15,elite:.16,desc:'Dingin menusuk.'},
-{n:'GUNUNG BERAPI',s1:'#5a1a0a',s2:'#2a0500',p:'#4a2010',d:'#ff6020',pool:[[24,1],[25,.7],[26,.5]],boss:27,goal:16,elite:.18,desc:'Lava yang mengamuk.'},
-{n:'KULI LANGIT',s1:'#c0d0f0',s2:'#6080c0',p:'#e0e8f8',d:'#ffe060',pool:[[28,.7],[29,.6],[30,.5]],boss:31,goal:16,elite:.18,desc:'Di atas awan.'},
-{n:'HUTAN MISTIS',s1:'#2a4a3a',s2:'#10251a',p:'#3a5a3a',d:'#a0ffa0',pool:[[32,.6],[33,.7],[34,.5]],boss:35,goal:18,elite:.20,desc:'Kabut tebal menyembunyikan kuno.'},
-{n:'LEMBAH SUNGAI',s1:'#3a5a40',s2:'#1a3020',p:'#5a7a50',d:'#80e0d0',pool:[[36,.8],[37,.7],[38,.5]],boss:39,goal:18,elite:.20,desc:'Air jernih, penuh predator.'},
-{n:'KOTA DUYUNG',s1:'#1a3a6a',s2:'#0a1a3a',p:'#3a5a9a',d:'#80e0ff',pool:[[40,.7],[41,.6],[42,.6]],boss:43,goal:18,elite:.22,desc:'Rumah makhluk laut.'},
-{n:'PADANG PASIR',s1:'#a07040',s2:'#604020',p:'#c0a060',d:'#ffd080',pool:[[44,.6],[45,.8],[46,.7]],boss:47,goal:20,elite:.22,desc:'Angin panas dan jebakan.'},
-{n:'HUTAN BAMBU',s1:'#3a7a2a',s2:'#1a4010',p:'#5a8a4a',d:'#a0ff80',pool:[[48,.7],[49,.6],[50,.6]],boss:51,goal:20,elite:.24,desc:'Ketenangan penuh pemburu.'},
-{n:'BENTENG IBLIS',s1:'#3a0a15',s2:'#150005',p:'#5a2020',d:'#ff4040',pool:[[52,.7],[53,.6],[54,.6]],boss:55,goal:20,elite:.26,desc:'Dunia bawah tanah.'},
-{n:'HUTAN GUGUR',s1:'#7a4a20',s2:'#3a2008',p:'#8a5a30',d:'#ffa060',pool:[[56,.8],[57,.7],[58,.6]],boss:59,goal:22,elite:.26,desc:'Daun jatuh, bahaya ada.'},
-{n:'KOTA ES',s1:'#7090c0',s2:'#304060',p:'#a0c0e0',d:'#ffffff',pool:[[60,.6],[61,.7],[62,.6]],boss:63,goal:22,elite:.28,desc:'Kota yang membeku.'},
-{n:'LABIRIN BAYANGAN',s1:'#2a0a4a',s2:'#0a0015',p:'#4a2080',d:'#a060ff',pool:[[64,.8],[65,.7],[66,.6]],boss:67,goal:22,elite:.30,desc:'Jalan tak berujung.'},
-{n:'DATARAN LANGIT',s1:'#a0b0d0',s2:'#506090',p:'#e0e8f0',d:'#ffe060',pool:[[68,.7],[69,.7],[70,.6]],boss:71,goal:24,elite:.30,desc:'Menuju puncak tertinggi.'},
-{n:'PLANET KUNO',s1:'#1a1a3a',s2:'#0a0515',p:'#2a2a5a',d:'#80ffff',pool:[[72,.7],[73,.6],[74,.7]],boss:75,goal:24,elite:.32,desc:'Teknologi masa lalu.'},
-{n:'RAJA KEGELAPAN',s1:'#1a0020',s2:'#050005',p:'#2a0020',d:'#ff00a0',pool:[],boss:79,goal:1,elite:0,desc:'Pertarungan terakhir.'}
-];
-while(STAGES.length<100){const i=STAGES.length;STAGES.push({n:'DUNIA '+(i+1),s1:'#2a3a2a',s2:'#15251a',p:'#3a4a3a',d:'#7acc5a',pool:[[0,1]],boss:3,goal:10+i*.3,elite:.2+i*.005,desc:'Petualangan lanjut.'});}
+const STAGES=STAGE_POOLS.map((sp,i)=>({n:'',s1:'#2a3a2a',s2:'#15251a',p:'#3a4a3a',d:'#7acc5a',pool:sp.pool,boss:sp.boss,goal:15,elite:Math.min(.3,.06+i*.0025),desc:'Musuh: '+sp.names.join(', ')+'. Penjaga stage: '+sp.bossName+'.'}));
 const STAGE_MAP_NAMES=['Forest Entrance','Green Meadow','Forest Path','Ruined Village','Goblin Camp','Rocky Hill','Dark Forest','Forgotten Ruins','Sacred Grove','Misty Woods','Mushroom Forest','Spider Nest','Goblin Outpost','Orc Camp','Orc Fortress','Mountain Pass','Lava Cave','Crystal Cave','Sea Coast','Kraken Lair','Ice Field','Snow Valley','Frost Cavern','Ice Golem Ruins','Volcano Field','Fire Realm','Dragon Lair','Magma Temple','Sky Shrine','Floating Islands','Wind Hill','Sky Castle','Ancient Tree','Forest Shrine','Haunted Forest','Spirit Lake','River Village','Swamp','Turtle Island','Hydra Lake','Jellyfish Sea','Coral Reef','Underwater Ruins','Leviathan Depths','Desert Dunes','Sand Temple','Bandit Hideout','Sand Fortress','Ninja Hideout','Samurai Castle','Bamboo Forest','Bamboo Temple','Imp Cavern','Demon Gate','Hellhound Pit','Demon Realm','Wolf Forest','Rogue Hideout','Archer Camp','Alpha Wolf Den','Ice Mountain','Frozen Tower','Ice Mage Temple','Frost Dragon Nest','Shadow Forest','Wraith Realm','Dark Tower','Shadow Lord Castle','Sky Realm','Harpy Nest','Thunder Plains','Zeus Temple','Robot Factory','Drone Base','Alien Ruins','Mecha Hangar','Dark Fortress','Demon Guard Post','Shadow Beast Lair','Dark Throne','Cursed Graveyard','Death City','Necromancer Tower','Void Rift','Fallen Angel Ruins','Celestial Gate','Warlock Sanctum','Chrono Tower','Shapeshifter Lab','Legendary Hero Tomb','Rogue King Keep','Mage Queen Palace','Dragon Queen Lair','Shadow Queen Castle','Forest Queen','Storm Queen','Light King','Dark King','Eclipse Lord','The Eclipse God'];
 const STAGE_SCENES=['entry','meadow','path','village','goblinCamp','rockyHill','darkForest','ruins','sacredGrove','mistyWoods','mushroomForest','spiderNest','goblinOutpost','orcCamp','orcFortress','mountainPass','lavaCave','crystalCave','seaCoast','krakenLair','iceField','snowValley','frostCavern','iceGolemRuins','volcanoField','fireRealm','dragonLair','magmaTemple','skyShrine','floatingIslands','windHill','skyCastle','ancientTree','forestShrine','hauntedForest','spiritLake','riverVillage','swamp','turtleIsland','hydraLake','jellyfishSea','coralReef','underwaterRuins','leviathanDepths','desertDunes','sandTemple','banditHideout','sandFortress','ninjaHideout','samuraiCastle','bambooForest','bambooTemple','impCavern','demonGate','hellhoundPit','demonRealm','wolfForest','rogueHideout','archerCamp','alphaWolfDen','iceMountain','frozenTower','iceMageTemple','frostDragonNest','shadowForest','wraithRealm','darkTower','shadowLordCastle','skyRealm','harpyNest','thunderPlains','zeusTemple','robotFactory','droneBase','alienRuins','mechaHangar','darkFortress','demonGuardPost','shadowBeastLair','darkThrone','cursedGraveyard','deathCity','necromancerTower','voidRift','fallenAngelRuins','celestialGate','warlockSanctum','chronoTower','shapeshifterLab','legendaryHeroTomb','rogueKingKeep','mageQueenPalace','dragonQueenLair','shadowQueenCastle','forestQueen','stormQueen','lightKing','darkKing','eclipseLord','eclipseGod'];
-for(let i=0;i<STAGES.length;i++){STAGES[i].mapName=STAGE_MAP_NAMES[i];STAGES[i].scene=STAGE_SCENES[i];}
+for(let i=0;i<STAGES.length;i++){STAGES[i].mapName=STAGE_MAP_NAMES[i];STAGES[i].scene=STAGE_SCENES[i];STAGES[i].n=STAGE_MAP_NAMES[i].toUpperCase();}
 function getWorldTheme(stageIdx){
   const name=STAGE_MAP_NAMES[clamp(stageIdx|0,0,STAGE_MAP_NAMES.length-1)].toUpperCase();
   if(/SEA|KRAKEN|LAKE|RIVER|SWAMP|TURTLE ISLAND|JELLYFISH|CORAL|UNDERWATER|LEVIATHAN|HYDRA/.test(name))return'water';
@@ -2779,7 +2981,7 @@ function randInt(a,b){return Math.floor(rand(a,b+1))}
 function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
 function clamp(v,a,b){return v<a?a:v>b?b:v}
 function pick(a){return a[randInt(0,a.length-1)]}
-function weightedPick(items,weights){let r=Math.random(),s=0;for(let i=0;i<items.length;i++){s+=weights[i];if(r<=s)return items[i];}return items[items.length-1];}
+function weightedPick(items,weights){let tot=0;for(let i=0;i<weights.length;i++)tot+=weights[i];let r=Math.random()*tot,s=0;for(let i=0;i<items.length;i++){s+=weights[i];if(r<=s)return items[i];}return items[items.length-1];}
 function angleDiff(a,b){let d=a-b;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return d;}
 function findBestTarget(md,ch,op){md=md??600;ch=ch??Math.PI;op=op||{};const f=Math.atan2(player.dirY,player.dirX);let best=null,bs=-Infinity;for(const e of enemies){if(e.stun>0&&op.skipStunned)continue;const dx=e.x-player.x,dy=e.y-player.y,d=Math.hypot(dx,dy);if(d>md||d<1)continue;const a=Math.atan2(dy,dx),diff=angleDiff(a,f);if(Math.abs(diff)>ch)continue;let s=100-d*.15;if(e.boss)s+=250;if(e.elite)s+=60;s-=Math.abs(diff)*50;if(e.hp<e.maxHp*.4)s+=25;if(s>bs){bs=s;best=e;}}return best;}
 function predictAim(t,ps){const dx=t.x-player.x,dy=t.y-player.y,d=Math.hypot(dx,dy),time=d/ps;let tvx=0,tvy=0;if(t.ai==='chase'||t.ai==='erratic'){const td=Math.hypot(player.x-t.x,player.y-t.y)||1;tvx=(player.x-t.x)/td*t.spd;tvy=(player.y-t.y)/td*t.spd;}else if(t.ai==='pounce'&&t.charging>0){tvx=t.vx;tvy=t.vy;}if(t.strafeDir&&Math.hypot(tvx,tvy)>0){const n=Math.hypot(tvx,tvy),px=-tvy/n,py=tvx/n;tvx+=px*t.spd*.5*t.strafeDir;tvy+=py*t.spd*.5*t.strafeDir;}const ex=t.x+tvx*time,ey=t.y+tvy*time;return{x:ex,y:ey,angle:Math.atan2(ey-player.y,ex-player.x),dist:d};}
@@ -2896,8 +3098,8 @@ function getStageSpawnConfig(){const stageIdx=stageIndex,s=stageIdx+1,isFinal=st
 
 function spawnEnemy(forceBoss=false,spawnOpts=null){const st=STAGES[stageIndex];let idx;const normalPool=st.pool||[];const spawnCfg=getStageSpawnConfig();const progress=spawnCfg.targetKills>0?killsInStage/spawnCfg.targetKills:0;let unlocked=normalPool.length;if(progress<.34)unlocked=Math.min(1,normalPool.length);else if(progress<.70)unlocked=Math.min(2,normalPool.length);const activePool=normalPool.slice(0,unlocked);if(spawnOpts&&spawnOpts.summoned)idx=normalPool.length?normalPool[0][0]:st.boss;else if(normalPool.length===0)idx=st.boss;else if(forceBoss&&st.boss!==undefined&&!enemies.some(e=>e.boss))idx=st.boss;else if(st.boss!==undefined&&!enemies.some(e=>e.boss)&&killsInStage>=spawnCfg.targetKills)idx=st.boss;else{const pool=activePool.length?activePool:normalPool.slice(0,1);idx=weightedPick(pool.map(p=>p[0]),pool.map(p=>p[1]));}
 const def=ET[idx];if(!def)return;let x,y,tries=0;if(spawnOpts&&Number.isFinite(spawnOpts.overrideX)){x=spawnOpts.overrideX;y=spawnOpts.overrideY;}else do{x=rand(60,WORLD.w-60);y=rand(100,WORLD.h-60);tries++;}while(Math.hypot(x-player.x,y-player.y)<220&&tries<40);
-const diffNorm=getStageDifficultyNorm(stageIndex);const eliteChance=Math.min(.45,st.elite+diffNorm*0.30);const isElite=!def.boss&&Math.random()<eliteChance;const hpM=isElite?1.8:1,sM=settings.difficulty;const hpScale=1+diffNorm*10.0,atkScale=1+diffNorm*7.0,spdScale=1+diffNorm*0.35;const role=def.w==='bow'?'ranged':def.w==='staff'?'mage':def.w==='spear'?'lancer':def.w==='axe'?'bruiser':(def.w==='dagger'||def.w==='katana')?'assassin':def.boss?'boss':(def.ai==='pounce'?'charger':'melee');const skillType=getEnemySkillProfile(def,st);const skillBaseCd=Math.max(2.0,4.2-stageIndex*.012)+(isElite?-0.5:0);
-const newEnemy={_id:++enemyIdCounter,name:def.n,p:def.p,v:def.v,w:def.w,x,y,r:def.r,hp:def.hp*hpM*sM*hpScale,maxHp:def.hp*hpM*sM*hpScale,atk:def.atk*sM*atkScale,spd:def.spd*spdScale,xp:Math.round(def.xp*(isElite?2:1)*(1+diffNorm*3.5)),g:Math.round(def.g*(isElite?2:1)*(1+diffNorm*3.5)),phase:rand(0,6),hit:0,squash:0,attackCd:rand(.2,1.2),elite:isElite,boss:!!def.boss,pounceTimer:rand(1.5,3),charging:0,stun:0,slow:0,pull:0,c:def.c,cd:def.cd,ai:def.ai,sm:def.sm,role,skillType,skillBaseCd,skillCd:rand(1.2,3.2),skillFlash:0,summoned:!!(spawnOpts&&spawnOpts.summoned),strafeTimer:rand(.3,1),strafeDir:Math.random()<.5?-1:1,retreating:0,retreatTimer:rand(1,2),invuln:0};
+const diffNorm=getStageDifficultyNorm(stageIndex);const eliteChance=Math.min(.45,st.elite+diffNorm*0.30);const isElite=!def.boss&&Math.random()<eliteChance;const hpM=isElite?1.8:1,sM=settings.difficulty;const hpScale=1+diffNorm*10.0,atkScale=1+diffNorm*7.0,spdScale=1+diffNorm*0.35;const role=def.w==='bow'?'ranged':def.w==='staff'?'mage':def.w==='spear'?'lancer':def.w==='axe'?'bruiser':(def.w==='dagger'||def.w==='katana')?'assassin':def.boss?'boss':(def.ai==='pounce'?'charger':'melee');const skillType=def.sp||getEnemySkillProfile(def,st);const skillBaseCd=Math.max(2.0,4.2-stageIndex*.012)+(isElite?-0.5:0);
+const newEnemy={_id:++enemyIdCounter,a:def.a,th:def.th||0,name:def.n,p:def.p,v:def.v,w:def.w,x,y,r:def.r,hp:def.hp*hpM*sM*hpScale,maxHp:def.hp*hpM*sM*hpScale,atk:def.atk*sM*atkScale,spd:def.spd*spdScale,xp:Math.round(def.xp*(isElite?2:1)*(1+diffNorm*3.5)),g:Math.round(def.g*(isElite?2:1)*(1+diffNorm*3.5)),phase:rand(0,6),hit:0,squash:0,attackCd:rand(.2,1.2),elite:isElite,boss:!!def.boss,pounceTimer:rand(1.5,3),charging:0,stun:0,slow:0,pull:0,c:def.c,cd:def.cd,ai:def.ai,sm:def.sm,role,skillType,skillBaseCd,skillCd:rand(1.2,3.2),skillFlash:0,summoned:!!(spawnOpts&&spawnOpts.summoned),strafeTimer:rand(.3,1),strafeDir:Math.random()<.5?-1:1,retreating:0,retreatTimer:rand(1,2),invuln:0};
 if(def.boss)attachBossConfig(newEnemy,def);enemies.push(newEnemy);
 if(def.boss){toast('👹 '+def.n.toUpperCase()+' MUNCUL!');screenFlash(.4);addShake(.45);spawnBossBanner(def.n.toUpperCase(),'⚠️ BOSS INCOMING','#ff3050','👹');}}
 function enemyProjectile(e,angle,dmg,opts={}){const speed=opts.speed||360,style=opts.style||'orb',life=opts.life||1.7;projectiles.push({x:e.x+Math.cos(angle)*(e.r+8),y:e.y+Math.sin(angle)*(e.r+8),vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,dmg,life,color:opts.color||e.c,r:opts.r||5,pat:opts.pat||'orb',style,fromEnemy:true,homing:opts.homing||0,targetPlayer:true,explodeR:opts.explodeR||0,explodeColor:opts.explodeColor||e.c,status:opts.status||null});burst(e.x+Math.cos(angle)*e.r,e.y+Math.sin(angle)*e.r,opts.color||e.c,4,{spd:90,life:[.15,.3]});}
